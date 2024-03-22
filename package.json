@@ -1,6 +1,7 @@
 {
   "name": "@calindra/nonodo",
   "version": "0.1.0",
+  "private": false,
   "description": "Brunodo CLI tool",
   "homepage": "https://github.com/Calindra/brunodo#readme",
   "bugs": {
@@ -15,9 +16,13 @@
     "brunodo": "./brunodo.js"
   },
   "scripts": {
+    "start": "node src/brunodo.js",
     "prepack": "[ \"$(uname -op)\" != \"x86_64 GNU/Linux\" ] && (echo Can be packed only on x86_64 GNU/Linux && exit 1) || ([ \"$(./anchor --version)\" != \"anchor-cli $(jq -r .version package.json)\" ] && (echo Check anchor binary version && exit 2) || exit 0)"
   },
   "publishConfig": {
     "access": "public"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.30"
   }
 }
