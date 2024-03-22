@@ -13,7 +13,7 @@
   },
   "license": "MIT",
   "bin": {
-    "brunodo": "./brunodo.js"
+    "brunodo": "./src/brunodo.js"
   },
   "scripts": {
     "start": "node src/brunodo.js",
