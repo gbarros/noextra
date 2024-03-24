@@ -1,0 +1,50 @@
+name: NPM Publish
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.*"
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: "recursive"
+      
+      # - name: Install Foundry
+      #   uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Extract tag name
+        id: extract_tag
+        run: echo "::set-output name=tag::$(echo ${GITHUB_REF#refs/tags/})"
+
+      - name: Update package.json
+        run: |
+          TAG="${{ steps.extract_tag.outputs.tag }}"
+          TAG_NO_V=$(echo "$TAG" | sed 's/^v//')
+          sed -i "s/\"version\": \".*\"/\"version\": \"$TAG_NO_V\"/" package.json
+          echo "Updated version to $TAG_NO_V in package.json"
+
+      # - name: Download nonodo binary
+      #   run: |
+      #     mkdir -p bin
+      #     curl -L -o bin/nonodo.tar.gz https://github.com/gligneul/nonodo/releases/download/v0.1.0/nonodo-v0.1.0-linux-amd64.tar.gz
+      #     curl -L -o bin/nonodo.md5 https://github.com/gligneul/nonodo/releases/download/v0.1.0/nonodo-v0.1.0-linux-amd64.tar.gz.md5
+      #     cat bin/nonodo.md5 | head -n1 | cut -d " " -f1 | xargs -I _ echo "_ bin/nonodo.tar.gz"  | tee bin/nonodo_fix.md5
+      #     md5sum --check --strict bin/nonodo_fix.md5
+      #     tar -xzf bin/nonodo.tar.gz -C bin
+      #     rm bin/nonodo.tar.gz
+
+      # Setup .npmrc file to publish to npm
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20.x"
+          registry-url: "https://registry.npmjs.org"
+          cache: "npm"
+      - name: Publish
+        run: |
+          npm ci
+          npm pack
+          npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
