@@ -22,6 +22,12 @@
     "access": "public"
   },
   "devDependencies": {
+    "@types/adm-zip": "^0.5.5",
+    "@types/cli-progress": "^3.11.5",
     "@types/node": "^20.11.30"
+  },
+  "dependencies": {
+    "adm-zip": "^0.5.12",
+    "cli-progress": "^3.12.0"
   }
 }
