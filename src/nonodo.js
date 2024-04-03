@@ -7,9 +7,8 @@ const path = require("node:path");
 const { arch, platform, tmpdir } = require("node:os");
 const { version } = require("../package.json");
 const { createHash } = require("node:crypto");
-const https = require("node:https");
-// const { } = require("node:crypto");
-// const zlib = require("node:zlib");
+const { get: request } = require("node:https");
+const zlib = require("node:zlib");
 
 const PACKAGE_NONODO_VERSION = process.env.PACKAGE_NONODO_VERSION ?? "0.1.0";
 const PACKAGE_NONODO_URL = new URL(
@@ -64,8 +63,26 @@ function calculateHash(content, algorithm) {
     const hash = createHash(algorithm);
     hash.update(content);
     const hex = hash.digest("hex");
-    console.log(`Hash: ${hex}`);
     resolve(hex);
+  });
+}
+
+function extractFileFromTarball(tarballBuffer, filepath) {
+  return new Promise((resolve, reject) => {
+    let offset = 0;
+    while (offset < tarballBuffer.length) {
+      const header = tarballBuffer.slice(offset, offset + 512);
+
+      const fileName = header.toString('utf-8', 0, 100).replace(/\0.*/g, '')
+      const fileSize = parseInt(header.toString('utf-8', 124, 136).replace(/\0.*/g, ''), 8)
+
+      if (fileName === filepath) {
+        resolve(tarballBuffer.subarray(offset, offset + fileSize))
+      }
+
+      // Clamp offset to the uppoer multiple of 512
+      offset = (offset + fileSize + 511) & ~511
+    }
   });
 }
 
@@ -79,8 +96,7 @@ async function downloadBinary() {
 
   const dest = path.join(dir, releaseName);
 
-  const response = await makeRequest2(url);
-  const binary = Buffer.from(await response.arrayBuffer());
+  const binary = await makeRequest(url);
 
   writeFileSync(dest, binary, {
     signal: asyncController.signal,
@@ -102,7 +118,7 @@ async function downloadHash() {
 
   const dest = path.join(dir, filename);
 
-  const response = await makeRequest2(url);
+  const response = await makeRequest(url);
   const body = response.toString("utf-8");
 
   writeFileSync(dest, body, {
@@ -111,7 +127,7 @@ async function downloadHash() {
 
   console.log(`Downloaded hex: ${dest}`);
 
-  return body;
+  return body.trim();
 }
 
 /**
@@ -119,13 +135,11 @@ async function downloadHash() {
  * @param {URL} url
  * @returns {Promise<Buffer>}
  */
-async function makeRequest2(url) {
-  console.log("makeRequest2", url.href);
+function makeRequest(url) {
+  console.log("makeRequest", url.href);
 
   return new Promise((resolve, reject) => {
-    const req = https.get(url, (res) => {
-      console.log("statusCode:", res.statusCode);
-
+    const req = request(url, (res) => {
       if (res.statusCode >= 200 && res.statusCode < 300) {
         const length = parseInt(res.headers["content-length"], 10);
         const chunks = []
@@ -134,15 +148,18 @@ async function makeRequest2(url) {
         res.on("data", (chunk) => {
           console.log(`progress ${url.pathname}`, size, "/", length, "bytes");
           chunks.push(chunk);
-          size++;
+          if (chunk?.length) {
+            size += chunk.length;
+          } else {
+            size++;
+          }
         });
 
         res.on("end", () => {
           resolve(Buffer.concat(chunks));
         });
       } else if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-        console.log("redirecting");
-        makeRequest2(new URL(res.headers.location)).then(resolve).catch(reject);
+        makeRequest(new URL(res.headers.location)).then(resolve).catch(reject);
       } else {
         reject(new Error(`Error ${res.statusCode} when downloading the package!`));
       }
@@ -159,19 +176,6 @@ async function makeRequest2(url) {
   });
 
 }
-
-// async function makeRequest(url) {
-//   const response = await fetch(url, {
-//     signal: asyncController.signal,
-//     redirect: "follow",
-//   });
-
-//   if (!response.ok || !response.body) {
-//     throw new Error(`Error ${response.statusCode} when downloading the package!`);
-//   }
-
-//   return response;
-// }
 
 async function runNonodo(location) {
   console.log(`Running nonodo binary: ${location}`);
@@ -208,14 +212,16 @@ async function getNonodoAvailable() {
 
     console.log(`Nonodo binary not found: ${fullpath}`);
     console.log(`Downloading nonodo binary...`);
-    const [, hash] = await Promise.all([downloadBinary(), downloadHash()]);
-    const calculatedHash = await calculateHash(fullpath, HASH_ALGO);
+    const [binary, hash] = await Promise.all([downloadBinary(), downloadHash()]);
+    const calculatedHash = await calculateHash(binary, HASH_ALGO);
 
     if (hash !== calculatedHash) {
-      throw new Error(`Hash mismatch for nonodo binary.`);
+      throw new Error(`Hash mismatch for nonodo binary. Expected ${hash}, got ${calculatedHash}`);
     }
 
     console.log(`Downloaded nonodo binary.`);
+
+    return fullpath;
   }
 
   throw new Error(`Incompatible platform.`);
@@ -228,7 +234,7 @@ async function tryPackageNonodo() {
     process.once("SIGINT", () => asyncController.abort());
     const nonodoPath = await getNonodoAvailable();
     console.log("nonodo path:", nonodoPath);
-    // await runNonodo(nonodoPath);
+    await runNonodo(nonodoPath);
     return true;
   } catch (e) {
     console.error(e);
