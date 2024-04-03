@@ -90,10 +90,18 @@ function calculateHash(path, algorithm) {
   });
 }
 
-function unpackTarball(tarballPath, fullPath) {
+function unpackZip(zipPath, destPath) {
+  const zip = new AdmZip(zipPath);
+  const entry = zip.getEntry("nonodo.exe");
+  if (!entry) throw new Error("Dont find binary on zip");
+  const buffer = entry.getData();
+  writeFileSync(destPath, buffer, { mode: 0o755 });
+}
+
+function unpackTarball(tarballPath, destPath) {
   const tarballDownloadBuffer = readFileSync(tarballPath);
   const tarballBuffer = unzipSync(tarballDownloadBuffer);
-  writeFileSync(fullPath, extractFileFromTarball(tarballBuffer, "nonodo"), {
+  writeFileSync(destPath, extractFileFromTarball(tarballBuffer, "nonodo"), {
     mode: 0o755,
   });
 }
@@ -288,9 +296,10 @@ async function getNonodoAvailable() {
       unpackTarball(releasePath, binaryPath);
     } else {
       /** unzip this */
+      unpackZip(releasePath, binaryPath);
     }
 
-    if (!existsSync(binaryPath)) throw new Error("Problem in unpack");
+    if (!existsSync(binaryPath)) throw new Error("Problem on unpack");
 
     return binaryPath;
   }
