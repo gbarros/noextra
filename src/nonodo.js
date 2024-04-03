@@ -1,6 +1,11 @@
 #!/usr/bin/env node
-const { existsSync, createReadStream, readFileSync, writeFileSync } = require("node:fs");
-const { Buffer } = require("node:buffer")
+const {
+  existsSync,
+  createReadStream,
+  readFileSync,
+  writeFileSync,
+} = require("node:fs");
+const { Buffer } = require("node:buffer");
 const { URL } = require("node:url");
 const { spawn } = require("node:child_process");
 const path = require("node:path");
@@ -9,11 +14,14 @@ const { version } = require("../package.json");
 const { createHash } = require("node:crypto");
 const { get: request } = require("node:https");
 const { unzipSync } = require("node:zlib");
+const { SingleBar, Presets } = require("cli-progress");
+const AdmZip = require("adm-zip");
 
-const PACKAGE_NONODO_VERSION = process.env.PACKAGE_NONODO_VERSION ?? "0.1.0";
+const PACKAGE_NONODO_VERSION =
+  process.env.PACKAGE_NONODO_VERSION ?? "0.2.0-beta";
 const PACKAGE_NONODO_URL = new URL(
   process.env.PACKAGE_NONODO_URL ??
-  `https://github.com/gligneul/nonodo/releases/download/v${PACKAGE_NONODO_VERSION}/`
+    `https://github.com/Calindra/nonodo/releases/download/v${PACKAGE_NONODO_VERSION}/`,
 );
 const PACKAGE_NONODO_DIR = process.env.PACKAGE_NONODO_DIR ?? tmpdir();
 
@@ -25,7 +33,7 @@ const AVAILABLE_BINARY_NAME = new Set([
   "linux-amd64",
   "linux-arm64",
   "windows-amd64",
-])
+]);
 
 function getPlatform() {
   const plat = platform();
@@ -38,7 +46,6 @@ function getArch() {
   if (arc === "x64") return "amd64";
   else return arc;
 }
-
 
 function getReleaseName() {
   const arcName = getArch();
@@ -86,7 +93,9 @@ function calculateHash(path, algorithm) {
 function unpackTarball(tarballPath, fullPath) {
   const tarballDownloadBuffer = readFileSync(tarballPath);
   const tarballBuffer = unzipSync(tarballDownloadBuffer);
-  writeFileSync(fullPath, extractFileFromTarball(tarballBuffer, "nonodo"), { mode: 0o755 });
+  writeFileSync(fullPath, extractFileFromTarball(tarballBuffer, "nonodo"), {
+    mode: 0o755,
+  });
 }
 
 /**
@@ -105,17 +114,20 @@ function extractFileFromTarball(tarballBuffer, filepath) {
   let offset = 0;
   while (offset < tarballBuffer.length) {
     const header = tarballBuffer.slice(offset, offset + 512);
-    offset += 512
+    offset += 512;
 
-    const fileName = header.toString('utf-8', 0, 100).replace(/\0.*/g, '')
-    const fileSize = parseInt(header.toString('utf-8', 124, 136).replace(/\0.*/g, ''), 8)
+    const fileName = header.toString("utf-8", 0, 100).replace(/\0.*/g, "");
+    const fileSize = parseInt(
+      header.toString("utf-8", 124, 136).replace(/\0.*/g, ""),
+      8,
+    );
 
     if (fileName === filepath) {
-      return tarballBuffer.subarray(offset, offset + fileSize)
+      return tarballBuffer.subarray(offset, offset + fileSize);
     }
 
     // Clamp offset to the uppoer multiple of 512
-    offset = (offset + fileSize + 511) & ~511
+    offset = (offset + fileSize + 511) & ~511;
   }
 }
 
@@ -170,34 +182,47 @@ async function downloadHash() {
  */
 function makeRequest(url) {
   return new Promise((resolve, reject) => {
+    /** @type {SingleBar=} */
+    let bar;
+
     const req = request(url, (res) => {
       if (res.statusCode >= 200 && res.statusCode < 300) {
         const length = parseInt(res.headers["content-length"], 10);
-        const chunks = []
+        const chunks = [];
         let size = 0;
+        if (!Number.isNaN(length)) {
+          bar = new SingleBar({}, Presets.shades_classic);
+          bar.start(length, 0);
+        }
 
         res.on("data", (chunk) => {
           // const percent = Math.floor(100 * size / length);
-          console.log(`progress ${url.pathname}`, size, "/", length, "bytes");
+          // console.log(`progress ${url.pathname}`, size, "/", length, "bytes");
           chunks.push(chunk);
-          if (chunk?.length) {
-            size += chunk.length;
-          } else {
-            size++;
-          }
+          size += chunk.length;
+          bar?.update(size);
         });
 
         res.on("end", () => {
+          bar?.stop();
           resolve(Buffer.concat(chunks));
         });
-      } else if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+      } else if (
+        res.statusCode >= 300 &&
+        res.statusCode < 400 &&
+        res.headers.location
+      ) {
         makeRequest(new URL(res.headers.location)).then(resolve).catch(reject);
       } else {
-        reject(new Error(`Error ${res.statusCode} when downloading the package!`));
+        bar?.stop();
+        console.error(res.statusCode, res.statusMessage);
+        reject(
+          new Error(`Error ${res.statusCode} when downloading the package!`),
+        );
       }
     });
-
     req.on("error", (e) => {
+      bar?.stop();
       reject(e);
     });
 
@@ -206,7 +231,6 @@ function makeRequest(url) {
       reject(new Error("Request aborted."));
     });
   });
-
 }
 
 async function runNonodo(location) {
@@ -253,19 +277,20 @@ async function getNonodoAvailable() {
     const calculatedHash = await calculateHash(releasePath, HASH_ALGO);
 
     if (hash !== calculatedHash) {
-      throw new Error(`Hash mismatch for nonodo binary. Expected ${hash}, got ${calculatedHash}`);
+      throw new Error(
+        `Hash mismatch for nonodo binary. Expected ${hash}, got ${calculatedHash}`,
+      );
     }
 
     console.log(`Hash verified.`);
 
     if (getPlatform() !== "windows") {
-      unpackTarball(releasePath, binaryPath)
+      unpackTarball(releasePath, binaryPath);
     } else {
       /** unzip this */
     }
 
     if (!existsSync(binaryPath)) throw new Error("Problem in unpack");
-
 
     return binaryPath;
   }
