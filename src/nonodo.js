@@ -8,7 +8,7 @@ const { arch, platform, tmpdir } = require("node:os");
 const { version } = require("../package.json");
 const { createHash } = require("node:crypto");
 const { get: request } = require("node:https");
-const zlib = require("node:zlib");
+// const { unzip, gunzip } = require("node:zlib");
 
 const PACKAGE_NONODO_VERSION = process.env.PACKAGE_NONODO_VERSION ?? "0.1.0";
 const PACKAGE_NONODO_URL = new URL(
@@ -67,23 +67,21 @@ function calculateHash(content, algorithm) {
   });
 }
 
-function extractFileFromTarball(tarballBuffer, filepath) {
-  return new Promise((resolve, reject) => {
-    let offset = 0;
-    while (offset < tarballBuffer.length) {
-      const header = tarballBuffer.slice(offset, offset + 512);
+async function extractFileFromTarball(tarballBuffer, filepath) {
+  let offset = 0;
+  while (offset < tarballBuffer.length) {
+    const header = tarballBuffer.slice(offset, offset + 512);
 
-      const fileName = header.toString('utf-8', 0, 100).replace(/\0.*/g, '')
-      const fileSize = parseInt(header.toString('utf-8', 124, 136).replace(/\0.*/g, ''), 8)
+    const fileName = header.toString('utf-8', 0, 100).replace(/\0.*/g, '')
+    const fileSize = parseInt(header.toString('utf-8', 124, 136).replace(/\0.*/g, ''), 8)
 
-      if (fileName === filepath) {
-        resolve(tarballBuffer.subarray(offset, offset + fileSize))
-      }
-
-      // Clamp offset to the uppoer multiple of 512
-      offset = (offset + fileSize + 511) & ~511
+    if (fileName === filepath) {
+      return tarballBuffer.subarray(offset, offset + fileSize)
     }
-  });
+
+    // Clamp offset to the uppoer multiple of 512
+    offset = (offset + fileSize + 511) & ~511
+  }
 }
 
 async function downloadBinary() {
@@ -101,6 +99,8 @@ async function downloadBinary() {
   writeFileSync(dest, binary, {
     signal: asyncController.signal,
   });
+
+  const tarballBuffer = unzipSync(binary);
 
   return binary;
 }
