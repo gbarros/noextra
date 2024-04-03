@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-const { existsSync, createReadStream, createWriteStream, writeFileSync } = require("node:fs");
+const { existsSync, createReadStream, readFileSync, writeFileSync } = require("node:fs");
 const { Buffer } = require("node:buffer")
 const { URL } = require("node:url");
 const { spawn } = require("node:child_process");
@@ -8,7 +8,7 @@ const { arch, platform, tmpdir } = require("node:os");
 const { version } = require("../package.json");
 const { createHash } = require("node:crypto");
 const { get: request } = require("node:https");
-// const { unzip, gunzip } = require("node:zlib");
+const { unzipSync } = require("node:zlib");
 
 const PACKAGE_NONODO_VERSION = process.env.PACKAGE_NONODO_VERSION ?? "0.1.0";
 const PACKAGE_NONODO_URL = new URL(
@@ -83,10 +83,29 @@ function calculateHash(path, algorithm) {
   });
 }
 
-async function extractFileFromTarball(tarballBuffer, filepath) {
+function unpackTarball(tarballPath, fullPath) {
+  const tarballDownloadBuffer = readFileSync(tarballPath);
+  const tarballBuffer = unzipSync(tarballDownloadBuffer);
+  writeFileSync(fullPath, extractFileFromTarball(tarballBuffer, "nonodo"), { mode: 0o755 });
+}
+
+/**
+ *
+ * @param {Buffer} tarballBuffer
+ * @param {string} filepath
+ * @returns
+ */
+function extractFileFromTarball(tarballBuffer, filepath) {
+  // Tar archives are organized in 512 byte blocks.
+  // Blocks can either be header blocks or data blocks.
+  // Header blocks contain file names of the archive in the first 100 bytes, terminated by a null byte.
+  // The size of a file is contained in bytes 124-135 of a header block and in octal format.
+  // The following blocks will be data blocks containing the file.
+
   let offset = 0;
   while (offset < tarballBuffer.length) {
     const header = tarballBuffer.slice(offset, offset + 512);
+    offset += 512
 
     const fileName = header.toString('utf-8', 0, 100).replace(/\0.*/g, '')
     const fileSize = parseInt(header.toString('utf-8', 124, 136).replace(/\0.*/g, ''), 8)
@@ -219,19 +238,19 @@ async function getNonodoAvailable() {
   const support = `${myPlatform}-${myArch}`;
 
   if (AVAILABLE_BINARY_NAME.has(support)) {
-    const fullpath = path.join(nonodoPath, binaryName);
+    const binaryPath = path.join(nonodoPath, binaryName);
 
-    if (existsSync(fullpath)) return fullpath;
+    if (existsSync(binaryPath)) return binaryPath;
 
-    console.log(`Nonodo binary not found: ${fullpath}`);
+    console.log(`Nonodo binary not found: ${binaryPath}`);
     console.log(`Downloading nonodo binary...`);
     const [hash] = await Promise.all([downloadHash(), downloadBinary()]);
 
     console.log(`Downloaded nonodo binary.`);
     console.log(`Verifying hash...`);
 
-    const binaryPath = path.join(nonodoPath, releaseName);
-    const calculatedHash = await calculateHash(binaryPath, HASH_ALGO);
+    const releasePath = path.join(nonodoPath, releaseName);
+    const calculatedHash = await calculateHash(releasePath, HASH_ALGO);
 
     if (hash !== calculatedHash) {
       throw new Error(`Hash mismatch for nonodo binary. Expected ${hash}, got ${calculatedHash}`);
@@ -239,7 +258,16 @@ async function getNonodoAvailable() {
 
     console.log(`Hash verified.`);
 
-    return fullpath;
+    if (getPlatform() !== "windows") {
+      unpackTarball(releasePath, binaryPath)
+    } else {
+      /** unzip this */
+    }
+
+    if (!existsSync(binaryPath)) throw new Error("Problem in unpack");
+
+
+    return binaryPath;
   }
 
   throw new Error(`Incompatible platform.`);
@@ -252,7 +280,7 @@ async function tryPackageNonodo() {
     process.once("SIGINT", () => asyncController.abort());
     const nonodoPath = await getNonodoAvailable();
     console.log("nonodo path:", nonodoPath);
-    // await runNonodo(nonodoPath);
+    await runNonodo(nonodoPath);
     return true;
   } catch (e) {
     console.error(e);
