@@ -154,8 +154,6 @@ async function downloadBinary() {
   writeFileSync(dest, binary, {
     signal: asyncController.signal,
   });
-
-  // const tarballBuffer = unzipSync(binary);
 }
 
 async function downloadHash() {
