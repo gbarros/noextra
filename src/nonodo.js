@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-const { existsSync, createReadStream, writeFileSync } = require("node:fs");
+const { existsSync, createReadStream, createWriteStream, writeFileSync } = require("node:fs");
 const { Buffer } = require("node:buffer")
 const { URL } = require("node:url");
 const { spawn } = require("node:child_process");
@@ -58,12 +58,28 @@ const releaseName = getReleaseName();
 const binaryName = getBinaryName();
 const asyncController = new AbortController();
 
-function calculateHash(content, algorithm) {
+/**
+ *
+ * @param {string} path
+ * @param {string} algorithm
+ * @returns {Promise<string>}
+ */
+function calculateHash(path, algorithm) {
   return new Promise((resolve, reject) => {
+    const stream = createReadStream(path);
     const hash = createHash(algorithm);
-    hash.update(content);
-    const hex = hash.digest("hex");
-    resolve(hex);
+
+    stream.on("data", (chunk) => {
+      hash.update(chunk);
+    });
+
+    stream.on("error", (err) => {
+      reject(err);
+    });
+
+    stream.on("end", () => {
+      resolve(hash.digest("hex"));
+    });
   });
 }
 
@@ -100,9 +116,7 @@ async function downloadBinary() {
     signal: asyncController.signal,
   });
 
-  const tarballBuffer = unzipSync(binary);
-
-  return binary;
+  // const tarballBuffer = unzipSync(binary);
 }
 
 async function downloadHash() {
@@ -136,8 +150,6 @@ async function downloadHash() {
  * @returns {Promise<Buffer>}
  */
 function makeRequest(url) {
-  console.log("makeRequest", url.href);
-
   return new Promise((resolve, reject) => {
     const req = request(url, (res) => {
       if (res.statusCode >= 200 && res.statusCode < 300) {
@@ -146,6 +158,7 @@ function makeRequest(url) {
         let size = 0;
 
         res.on("data", (chunk) => {
+          // const percent = Math.floor(100 * size / length);
           console.log(`progress ${url.pathname}`, size, "/", length, "bytes");
           chunks.push(chunk);
           if (chunk?.length) {
@@ -212,14 +225,19 @@ async function getNonodoAvailable() {
 
     console.log(`Nonodo binary not found: ${fullpath}`);
     console.log(`Downloading nonodo binary...`);
-    const [binary, hash] = await Promise.all([downloadBinary(), downloadHash()]);
-    const calculatedHash = await calculateHash(binary, HASH_ALGO);
+    const [hash] = await Promise.all([downloadHash(), downloadBinary()]);
+
+    console.log(`Downloaded nonodo binary.`);
+    console.log(`Verifying hash...`);
+
+    const binaryPath = path.join(nonodoPath, releaseName);
+    const calculatedHash = await calculateHash(binaryPath, HASH_ALGO);
 
     if (hash !== calculatedHash) {
       throw new Error(`Hash mismatch for nonodo binary. Expected ${hash}, got ${calculatedHash}`);
     }
 
-    console.log(`Downloaded nonodo binary.`);
+    console.log(`Hash verified.`);
 
     return fullpath;
   }
@@ -234,7 +252,7 @@ async function tryPackageNonodo() {
     process.once("SIGINT", () => asyncController.abort());
     const nonodoPath = await getNonodoAvailable();
     console.log("nonodo path:", nonodoPath);
-    await runNonodo(nonodoPath);
+    // await runNonodo(nonodoPath);
     return true;
   } catch (e) {
     console.error(e);
