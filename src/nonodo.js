@@ -18,7 +18,7 @@ const { SingleBar, Presets } = require("cli-progress");
 const AdmZip = require("adm-zip");
 
 const PACKAGE_NONODO_VERSION =
-  process.env.PACKAGE_NONODO_VERSION ?? "0.2.0-beta";
+  process.env.PACKAGE_NONODO_VERSION ?? "0.2.0-beta.2";
 const PACKAGE_NONODO_URL = new URL(
   process.env.PACKAGE_NONODO_URL ??
     `https://github.com/Calindra/nonodo/releases/download/v${PACKAGE_NONODO_VERSION}/`,
@@ -240,7 +240,7 @@ function makeRequest(url) {
 }
 
 async function runNonodo(location) {
-  console.log(`Running nonodo binary: ${location}`);
+  console.log(`Running brunodo binary: ${location}`);
 
   const args = process.argv.slice(2);
   const nonodoBin = spawn(location, args, { stdio: "inherit" });
@@ -306,7 +306,7 @@ async function getNonodoAvailable() {
 }
 
 async function tryPackageNonodo() {
-  console.log(`Running nonodo ${version} for ${arch()} ${platform()}`);
+  console.log(`Running brunodo ${version} for ${arch()} ${platform()}`);
 
   try {
     process.once("SIGINT", () => asyncController.abort());
