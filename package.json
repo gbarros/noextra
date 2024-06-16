@@ -1,9 +1,10 @@
 {
-  "name": "@calindra/brunodo",
-  "version": "0.2.1",
+  "name": "@gbarros/noextra",
+  "version": "0.1.1-alpha",
   "private": false,
-  "description": "Nonodo CLI tool",
+  "description": "Nonodo CLI tool and bindings for testing and development",
   "homepage": "https://github.com/Calindra/brunodo#readme",
+  "type":"module",
   "bugs": {
     "url": "https://github.com/Calindra/brunodo/issues"
   },
@@ -15,6 +16,7 @@
   "bin": {
     "nonodo": "./src/nonodo.js"
   },
+  "main": "./src/index.js",
   "scripts": {
     "start": "node src/nonodo.js"
   },
@@ -27,7 +29,9 @@
     "@types/node": "^20.11.30"
   },
   "dependencies": {
+    "@doiim/tikua": "^0.8.1",
     "adm-zip": "^0.5.12",
-    "cli-progress": "^3.12.0"
+    "cli-progress": "^3.12.0",
+    "viem": "^2.14.0"
   }
 }

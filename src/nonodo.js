@@ -1,27 +1,26 @@
 #!/usr/bin/env node
-const {
+import {
   existsSync,
   createReadStream,
   readFileSync,
   writeFileSync,
-} = require("node:fs");
-const { Buffer } = require("node:buffer");
-const { URL } = require("node:url");
-const { spawn } = require("node:child_process");
-const path = require("node:path");
-const { arch, platform, tmpdir } = require("node:os");
-const { version } = require("../package.json");
-const { createHash } = require("node:crypto");
-const { get: request } = require("node:https");
-const { unzipSync } = require("node:zlib");
-const { SingleBar, Presets } = require("cli-progress");
-const AdmZip = require("adm-zip");
+} from "node:fs";
+import { Buffer } from "node:buffer";
+import { URL } from "node:url";
+import { spawn } from "node:child_process";
+import path from "node:path";
+import { arch, platform, tmpdir } from "node:os";
+import { readFile } from 'fs/promises';
+import { createHash } from "node:crypto";
+import { unzipSync } from "node:zlib";
+import { SingleBar, Presets } from "cli-progress";
+import AdmZip from "adm-zip";
 
 const PACKAGE_NONODO_VERSION =
-  process.env.PACKAGE_NONODO_VERSION ?? "0.2.0-beta.2";
+  process.env.PACKAGE_NONODO_VERSION ?? "1.0.4";
 const PACKAGE_NONODO_URL = new URL(
   process.env.PACKAGE_NONODO_URL ??
-    `https://github.com/Calindra/nonodo/releases/download/v${PACKAGE_NONODO_VERSION}/`,
+  `https://github.com/Calindra/nonodo/releases/download/v${PACKAGE_NONODO_VERSION}/`,
 );
 const PACKAGE_NONODO_DIR = process.env.PACKAGE_NONODO_DIR ?? tmpdir();
 
@@ -239,11 +238,11 @@ function makeRequest(url) {
   });
 }
 
-async function runNonodo(location) {
-  console.log(`Running brunodo binary: ${location}`);
+export async function runNonodo(location, args, options = { stdio: "inherit" }) {
+  console.log(`Running noExtra binary: ${location}`);
 
-  const args = process.argv.slice(2);
-  const nonodoBin = spawn(location, args, { stdio: "inherit" });
+  const _args = args || process.argv.slice(2);
+  const nonodoBin = spawn(location, _args, options);
   nonodoBin.on("exit", (code, signal) => {
     process.on("exit", () => {
       if (signal) {
@@ -258,9 +257,10 @@ async function runNonodo(location) {
     nonodoBin.kill("SIGINT");
     nonodoBin.kill("SIGTERM");
   });
+  return nonodoBin;
 }
 
-async function getNonodoAvailable() {
+export async function getNonodoAvailable() {
   const nonodoPath = PACKAGE_NONODO_DIR;
 
   const myPlatform = getPlatform();
@@ -306,12 +306,14 @@ async function getNonodoAvailable() {
 }
 
 async function tryPackageNonodo() {
-  console.log(`Running brunodo ${version} for ${arch()} ${platform()}`);
+  const { version } = JSON.parse(
+    await readFile(new URL('../package.json', import.meta.url))
+  );
+  console.log(`Running noExtra ${version} for ${arch()} ${platform()}`);
 
   try {
     process.once("SIGINT", () => asyncController.abort());
     const nonodoPath = await getNonodoAvailable();
-    console.log("nonodo path:", nonodoPath);
     await runNonodo(nonodoPath);
     return true;
   } catch (e) {
@@ -321,13 +323,16 @@ async function tryPackageNonodo() {
   return false;
 }
 
-tryPackageNonodo()
-  .then((success) => {
-    if (!success) {
+if (process.argv[1].includes("bin/nonodo")) {
+  tryPackageNonodo()
+    .then((success) => {
+      if (!success) {
+        process.exit(1);
+      }
+    })
+    .catch((e) => {
+      console.error(e);
       process.exit(1);
-    }
-  })
-  .catch((e) => {
-    console.error(e);
-    process.exit(1);
-  });
+    });
+}
+
