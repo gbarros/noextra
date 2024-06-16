@@ -1,6 +1,6 @@
 {
   "name": "@gbarros/noextra",
-  "version": "0.1.1-alpha",
+  "version": "0.1.2-beta",
   "private": false,
   "description": "Nonodo CLI tool and bindings for testing and development",
   "homepage": "https://github.com/Calindra/brunodo#readme",
