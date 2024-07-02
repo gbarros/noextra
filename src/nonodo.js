@@ -17,7 +17,7 @@ import { SingleBar, Presets } from "cli-progress";
 import AdmZip from "adm-zip";
 
 const PACKAGE_NONODO_VERSION =
-  process.env.PACKAGE_NONODO_VERSION ?? "1.0.4";
+  process.env.PACKAGE_NONODO_VERSION ?? await getLatestNonodoRelease();
 const PACKAGE_NONODO_URL = new URL(
   process.env.PACKAGE_NONODO_URL ??
   `https://github.com/Calindra/nonodo/releases/download/v${PACKAGE_NONODO_VERSION}/`,
@@ -38,6 +38,23 @@ function getPlatform() {
   const plat = platform();
   if (plat === "win32") return "windows";
   else return plat;
+}
+
+async function getLatestNonodoRelease() {
+  try {
+    const response = await fetch('https://api.github.com/repos/Calindra/nonodo/releases');
+    const data = await response.json();
+    const latestRelease = data.find(release => release.prerelease);
+    if (latestRelease) {
+      const version = latestRelease.tag_name.match(/\d+\.\d+\.\d+/);
+      return version ? version[0] : '1.1.0'; // Fallback to default version if no version match is found
+    } else {
+      return '1.1.0'; // Fallback to default version if no pre-release found
+    }
+  } catch (error) {
+    console.error('Error fetching the latest release:', error);
+    return '1.1.0'; // Fallback to default version if there's an error
+  }
 }
 
 function getArch() {
